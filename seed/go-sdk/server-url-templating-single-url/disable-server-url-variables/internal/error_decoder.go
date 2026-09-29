@@ -68,6 +68,12 @@ func NewErrorDecoder(errorCodes ErrorCodes, errorCodesOverrides ...ErrorCodes) E
 			return apiError
 		}
 		customError := newErrorFunc(apiError)
+		if len(bytes.TrimSpace(raw)) == 0 {
+			// The response has no body to decode (e.g. a 404 or 409 with an
+			// empty body), so we return the typed error as-is. Its embedded
+			// *core.APIError still carries the status code and headers.
+			return customError
+		}
 		if err := json.NewDecoder(bytes.NewReader(raw)).Decode(customError); err != nil {
 			// If we fail to decode the error, we return the
 			// API error as-is.

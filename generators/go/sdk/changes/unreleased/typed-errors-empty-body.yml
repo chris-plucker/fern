@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../../../../../fern-changes-yml.schema.json
+
+- summary: |
+    Error responses with an empty (or whitespace-only) body now return the typed error declared
+    for their status code instead of falling back to `*core.APIError`. Previously
+    `errors.As(err, &ConflictError{})` failed for a 409 with no body because the error decoder
+    tried to JSON-decode the empty body into the typed error. The typed error's embedded
+    `*core.APIError` still carries the status code and headers. Non-empty bodies that fail to
+    decode still fall back to `*core.APIError`, as before.
+  type: fix

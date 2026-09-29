@@ -49,6 +49,31 @@ func TestErrorDecoder(t *testing.T) {
 			giveBody:       `Resource not found`,
 			wantError:      core.NewAPIError(http.StatusNotFound, http.Header{}, errors.New("Resource not found")),
 		},
+		{
+			description:    "not found with empty body",
+			giveStatusCode: http.StatusNotFound,
+			giveHeader:     http.Header{"X-Request-Id": []string{"abc"}},
+			giveBody:       "",
+			wantError: &InternalTestNotFoundError{
+				APIError: core.NewAPIError(http.StatusNotFound, http.Header{"X-Request-Id": []string{"abc"}}, errors.New("")),
+			},
+		},
+		{
+			description:    "not found with whitespace-only body",
+			giveStatusCode: http.StatusNotFound,
+			giveHeader:     http.Header{},
+			giveBody:       " \r\n\t ",
+			wantError: &InternalTestNotFoundError{
+				APIError: core.NewAPIError(http.StatusNotFound, http.Header{}, errors.New(" \r\n\t ")),
+			},
+		},
+		{
+			description:    "unrecognized status code with empty body",
+			giveStatusCode: http.StatusInternalServerError,
+			giveHeader:     http.Header{},
+			giveBody:       "",
+			wantError:      core.NewAPIError(http.StatusInternalServerError, http.Header{}, errors.New("")),
+		},
 	}
 
 	for _, tt := range tests {
@@ -70,6 +95,25 @@ type InternalTestServerError struct {
 	*core.APIError
 
 	Message string `json:"message"`
+}
+
+func TestErrorDecoderEmptyBodyReturnsTypedError(t *testing.T) {
+	decoder := NewErrorDecoder(
+		ErrorCodes{
+			http.StatusNotFound: func(apiError *core.APIError) error {
+				return &InternalTestNotFoundError{APIError: apiError}
+			},
+		})
+
+	for _, body := range []string{"", "   ", "\n"} {
+		err := decoder(http.StatusNotFound, http.Header{}, bytes.NewReader([]byte(body)))
+
+		var notFoundError *InternalTestNotFoundError
+		if assert.True(t, errors.As(err, &notFoundError), "body %q", body) {
+			assert.Equal(t, http.StatusNotFound, notFoundError.StatusCode)
+			assert.Empty(t, notFoundError.Message)
+		}
+	}
 }
 
 func TestErrorDecoderWildcards(t *testing.T) {
@@ -124,6 +168,14 @@ func TestErrorDecoderWildcards(t *testing.T) {
 			giveStatusCode: http.StatusForbidden,
 			giveBody:       `<html><body>Forbidden</body></html>`,
 			wantError:      core.NewAPIError(http.StatusForbidden, http.Header{}, errors.New(`<html><body>Forbidden</body></html>`)),
+		},
+		{
+			description:    "wildcard with empty body returns the typed error",
+			giveStatusCode: http.StatusConflict,
+			giveBody:       "",
+			wantError: &InternalTestClientError{
+				APIError: core.NewAPIError(http.StatusConflict, http.Header{}, errors.New("")),
+			},
 		},
 		{
 			description:    "range boundaries are inclusive",
